@@ -3,37 +3,67 @@
 #include <time.h>
 
 
-#define H 15
-#define W 25
+#define GAME_H 15
+#define GAME_W 25
 
 
 #ifdef _WIN32
 	#include <conio.h>
+	#include <windows.h>
 	#define print_chars printf
 
 
 	typedef enum {
-		KEY_UP = 38,
-		KEY_DOWN = 40,
-		KEY_LEFT = 37,
-		KEY_RIGHT = 39
+		KEY_UP = 72,
+		KEY_DOWN = 80,
+		KEY_LEFT = 75,
+		KEY_RIGHT = 77
 	} Directions;
 	
 
-	// Nie jestem pewien, czy pod windowsem trzeba coś przygotować
-	void prepare() {
+	HANDLE h_console;
 
+
+	void prepare() {
+		h_console = GetStdHandle(STD_OUTPUT_HANDLE);
 	}
 
 
 	void clear() {
-
+		CONSOLE_SCREEN_BUFFER_INFO csbi;
+		SMALL_RECT scroll_rect;
+		COORD scroll_target;
+		CHAR_INFO fill;
+		if(!GetConsoleScreenBufferInfo(h_console, &csbi)) {
+			return;
+		}
+		scroll_rect.Left = 0;
+		scroll_rect.Top = 0;
+		scroll_rect.Right = csbi.dwSize.X;
+		scroll_rect.Bottom = csbi.dwSize.Y;
+		scroll_target.X = 0;
+		scroll_target.Y = (SHORT)(0 - csbi.dwSize.Y);
+		fill.Char.UnicodeChar = TEXT(' ');
+		fill.Attributes = csbi.wAttributes;
+		ScrollConsoleScreenBuffer(h_console, &scroll_rect, NULL, scroll_target, &fill);
+		csbi.dwCursorPosition.X = 0;
+		csbi.dwCursorPosition.Y = 0;
+		SetConsoleCursorPosition(h_console, csbi.dwCursorPosition);
 	}
 
 
-	// Zaimplementuj to
 	char get_signal() {
-		return 0;
+		DWORD start = GetTickCount();
+		int signal;
+		while (1) {
+			if(_kbhit()) {
+				signal = _getch();
+				return signal;
+			}
+			if(GetTickCount() - start >= 550) {
+				return -1;
+			}
+		}
 	}
 #else
 	#include <ncurses.h>
@@ -57,7 +87,7 @@ struct ThaCoord {
 };
 
 
-struct ThaCoord SEGMENTS[H * W];
+struct ThaCoord SEGMENTS[GAME_H * GAME_W];
 struct ThaCoord APPLE_COORDS;
 size_t LAST_SEGMENT_INDEX = 0;
 size_t SCORE_COUNTER = 0;
@@ -65,9 +95,9 @@ int CURRENT_DIRECTION = 0;
 
 
 void print_data() {
-	for(size_t n = 0; n < H + 2; n++) {
-		for(size_t m = 0; m < W + 2; m++) {
-			if(n == 0 || n == H + 1 || m == 0 || m == W + 1) {
+	for(size_t n = 0; n < GAME_H + 2; n++) {
+		for(size_t m = 0; m < GAME_W + 2; m++) {
+			if(n == 0 || n == GAME_H + 1 || m == 0 || m == GAME_W + 1) {
 				print_chars("#");
 				goto no_space;
 			}
@@ -89,20 +119,20 @@ void print_data() {
 				goto no_space;
 			}
 			print_chars(" ");
-			no_space:
+			no_space:;
 		}
 		print_chars("\n");
 	}
-	print_chars("Score => %ld", SCORE_COUNTER);
+	print_chars("Score => %lld, q => Quit", SCORE_COUNTER);
 }
 
 
 void update_apple_coords() {
 	size_t counter = 0;
-	size_t free_coords_count = H * W - (LAST_SEGMENT_INDEX + 1);
+	size_t free_coords_count = GAME_H * GAME_W - (LAST_SEGMENT_INDEX + 1);
 	size_t random_num = rand() % free_coords_count;
-	for(size_t n = 1; n <= H; n++) {
-		for(size_t m = 1; m <= W; m++) {
+	for(size_t n = 1; n <= GAME_H; n++) {
+		for(size_t m = 1; m <= GAME_W; m++) {
 			for(size_t k = 0; k <= LAST_SEGMENT_INDEX; k++) {
 				if(SEGMENTS[k].x == m && SEGMENTS[k].y == n) {
 					goto coords_not_free;
@@ -114,10 +144,10 @@ void update_apple_coords() {
 				goto updated;
 			}
 			counter++;
-			coords_not_free:
+			coords_not_free:;
 		}
 	}
-	updated:
+	updated:;
 }
 
 
@@ -174,7 +204,7 @@ size_t update_snake_coords(int signal) {
 	if(signal == 'q') {
 		return 0;
 	}
-	if((LAST_SEGMENT_INDEX == 0 || signal != CURRENT_DIRECTION) && signal != -1) {
+	if((LAST_SEGMENT_INDEX == 0 || signal != CURRENT_DIRECTION) && signal > 0) {
 		CURRENT_DIRECTION = signal;
 	}
 	for(size_t segment_index = LAST_SEGMENT_INDEX; segment_index > 0; segment_index--) {
@@ -207,9 +237,9 @@ size_t update_snake_coords(int signal) {
 	// Check if the head hit the border.
 	if(
 		SEGMENTS[0].x == 0 ||
-		SEGMENTS[0].x == W + 1 ||
+		SEGMENTS[0].x == GAME_W + 1 ||
 		SEGMENTS[0].y == 0 ||
-		SEGMENTS[0].y == H + 1
+		SEGMENTS[0].y == GAME_H + 1
 	) {
 		return 0;
 	}
@@ -221,15 +251,15 @@ int main(void) {
 	prepare();
 	srand(time(NULL));
 	struct ThaCoord head_coords;
-	head_coords.x = (W - 1) / 2 + 1;
-	head_coords.y = (H - 1) / 2 + 1;
+	head_coords.x = (GAME_W - 1) / 2 + 1;
+	head_coords.y = (GAME_H - 1) / 2 + 1;
 	SEGMENTS[LAST_SEGMENT_INDEX] = head_coords;
 	APPLE_COORDS.x = 0;
 	APPLE_COORDS.y = 0;
 	print_data();
 	int first_signal;
 	do {
-		first_signal = get_signal();
+		first_signal = getch();
 		if(first_signal == 'q') {
 			goto game_over;
 		}
@@ -256,17 +286,19 @@ int main(void) {
 		print_data();
 		signal = get_signal();
 	}
-	game_over:
+	game_over:;
 	clear();
 	print_chars(
-		"Game over.\nYour score: %ld\nPress any button to exit\n",
+		"Game over.\nYour score: %lld\nPress any button to exit\n",
 		SCORE_COUNTER
 	);
-	refresh();
 	#ifndef _WIN32
+		refresh();
 		timeout(-1);
 	#endif
 	getchar();
-	endwin();
+	#ifndef _WIN32
+		endwin();
+	#endif
 	return 0;
 }
