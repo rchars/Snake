@@ -12,7 +12,6 @@
 	#include <windows.h>
 	#define print_chars printf
 
-
 	typedef enum {
 		KEY_UP = 72,
 		KEY_DOWN = 80,
@@ -123,7 +122,7 @@ void print_data() {
 		}
 		print_chars("\n");
 	}
-	print_chars("Score => %lld, q => Quit", SCORE_COUNTER);
+	print_chars("Score => %zu, q => Quit", SCORE_COUNTER);
 }
 
 
@@ -289,7 +288,7 @@ int main(void) {
 	game_over:;
 	clear();
 	print_chars(
-		"Game over.\nYour score: %lld\nPress any button to exit\n",
+		"Game over.\nYour score: %zu\nPress any button to exit\n",
 		SCORE_COUNTER
 	);
 	#ifndef _WIN32
