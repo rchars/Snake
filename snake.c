@@ -3,8 +3,8 @@
 #include <time.h>
 
 
-#define GAME_H 15
-#define GAME_W 25
+#define GAME_H 13
+#define GAME_W 23
 
 
 #ifdef _WIN32
@@ -51,15 +51,24 @@
 	}
 
 
-	char get_signal() {
+	int get_signal() {
 		DWORD start = GetTickCount();
 		int signal;
 		while (1) {
 			if(_kbhit()) {
 				signal = _getch();
-				return signal;
+				if(
+					signal == KEY_UP ||
+					signal == KEY_DOWN ||
+					signal == KEY_LEFT ||
+					signal == KEY_RIGHT ||
+					signal == 'q'
+				) {
+					return signal;
+				}
+				return -1;
 			}
-			if(GetTickCount() - start >= 550) {
+			if(GetTickCount() - start >= 525) {
 				return -1;
 			}
 		}
@@ -67,8 +76,22 @@
 #else
 	#include <ncurses.h>
 	#define print_chars printw
-	#define get_signal getch
-	
+
+
+	int get_signal() {
+		int signal = getch();
+		if(
+			signal == KEY_UP ||
+			signal == KEY_DOWN ||
+			signal == KEY_LEFT ||
+			signal == KEY_RIGHT ||
+			signal == 'q'
+		) {
+			return signal;
+		}
+		return -1;	
+	}
+
 
 	void prepare() {
 		initscr();
@@ -86,7 +109,7 @@ struct ThaCoord {
 };
 
 
-struct ThaCoord SEGMENTS[GAME_H * GAME_W];
+struct ThaCoord SEGMENTS[GAME_H * GAME_W + 1];
 struct ThaCoord APPLE_COORDS;
 size_t LAST_SEGMENT_INDEX = 0;
 size_t SCORE_COUNTER = 0;
@@ -150,7 +173,7 @@ void update_apple_coords() {
 }
 
 
-void is_apple_eaten() {
+size_t is_apple_eaten() {
 	if(
 		SEGMENTS[0].x == APPLE_COORDS.x &&
 		SEGMENTS[0].y == APPLE_COORDS.y
@@ -190,12 +213,31 @@ void is_apple_eaten() {
 				goto insert_new_segment;
 			}
 		}
-		insert_new_segment:
+		insert_new_segment:;
+		SCORE_COUNTER++;
+		if(
+			SCORE_COUNTER == GAME_H * GAME_W - 1 &&
+			(
+				new_segment.x == 0 ||
+				new_segment.x == GAME_W ||
+				new_segment.y == 0 ||
+				new_segment.y == GAME_H
+			)
+		) {
+			goto last_apple;
+		}
+		if(
+			SCORE_COUNTER == GAME_H * GAME_W ||
+			SCORE_COUNTER == GAME_H * GAME_W - 1 
+		) {
+			return -1;
+		}
 		LAST_SEGMENT_INDEX += 1;
 		SEGMENTS[LAST_SEGMENT_INDEX] = new_segment;
-		SCORE_COUNTER++;
+		last_apple:;
 		update_apple_coords();
 	}
+	return 0;
 }
 
 
@@ -203,7 +245,7 @@ size_t update_snake_coords(int signal) {
 	if(signal == 'q') {
 		return 0;
 	}
-	if((LAST_SEGMENT_INDEX == 0 || signal != CURRENT_DIRECTION) && signal > 0) {
+	if(signal != -1) {
 		CURRENT_DIRECTION = signal;
 	}
 	for(size_t segment_index = LAST_SEGMENT_INDEX; segment_index > 0; segment_index--) {
@@ -224,7 +266,6 @@ size_t update_snake_coords(int signal) {
 			SEGMENTS[0].x += 1;
 			break;
 	}
-	// Check if the first segment has the same coords as any other segment.
 	for(size_t segment_index = 1; segment_index <= LAST_SEGMENT_INDEX; segment_index++) {
 		if(
 			SEGMENTS[0].x == SEGMENTS[segment_index].x &&
@@ -233,7 +274,6 @@ size_t update_snake_coords(int signal) {
 			return 0;
 		}
 	}
-	// Check if the head hit the border.
 	if(
 		SEGMENTS[0].x == 0 ||
 		SEGMENTS[0].x == GAME_W + 1 ||
@@ -274,23 +314,32 @@ int main(void) {
 	clear();
 	print_data();
 	#ifndef _WIN32
-		timeout(550);
+		timeout(525);
 	#endif
+	size_t winner_winner_apple_dinner = 0;
 	int signal = get_signal();
 	while(
-		update_snake_coords(signal)
+		update_snake_coords(signal) &&
+		(winner_winner_apple_dinner = is_apple_eaten()) == 0
 	) {
-		is_apple_eaten();
 		clear();
 		print_data();
 		signal = get_signal();
 	}
 	game_over:;
 	clear();
-	print_chars(
-		"Game over.\nYour score: %zu\nPress any button to exit\n",
-		SCORE_COUNTER
-	);
+	if(winner_winner_apple_dinner) {
+		print_chars(
+			"WINNER WINNER APPLE DINNER\nYour score: %zu\nPress any button to exit\n",
+			SCORE_COUNTER
+		);
+	}
+	else {
+		print_chars(
+			"Game over.\nYour score: %zu\nPress any button to exit\n",
+			SCORE_COUNTER
+		);
+	}
 	#ifndef _WIN32
 		refresh();
 		timeout(-1);
